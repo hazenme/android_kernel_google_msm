@@ -3417,3 +3417,10 @@ CONFIG_DQL=y
 CONFIG_NLATTR=y
 # CONFIG_AVERAGE is not set
 # CONFIG_CORDIC is not set
+
+#
+# Faux Specific Settings
+#
+
+CONFIG_GPU_OVERCLOCK=y
+CONFIG_GPU_OVERCLOCK_450=y
