@@ -116,7 +116,7 @@ armpmu_map_event(const unsigned (*event_map)[PERF_COUNT_HW_MAX], u64 config)
 	int mapping;
 
 	if (config >= PERF_COUNT_HW_MAX)
-		return -ENOENT;
+		return -EINVAL;
 
 	mapping = (*event_map)[config];
 	return mapping == HW_OP_UNSUPPORTED ? -ENOENT : mapping;
@@ -747,15 +747,14 @@ static void __init cpu_pmu_init(struct arm_pmu *armpmu)
 	armpmu->type = ARM_PMU_DEVICE_CPU;
 }
 
-static int cpu_has_active_perf(void)
+static int cpu_has_active_perf(int cpu)
 {
 	struct pmu_hw_events *hw_events;
 	int enabled;
 
 	if (!cpu_pmu)
 		return 0;
-
-	hw_events = cpu_pmu->get_hw_events();
+	hw_events = &per_cpu(cpu_hw_events, cpu);
 	enabled = bitmap_weight(hw_events->used_mask, cpu_pmu->num_events);
 
 	if (enabled)
@@ -788,7 +787,7 @@ static int __cpuinit pmu_cpu_notify(struct notifier_block *b,
 {
 	int irq;
 
-	if (cpu_has_active_perf()) {
+	if (cpu_has_active_perf((int)hcpu)) {
 		switch ((action & ~CPU_TASKS_FROZEN)) {
 
 		case CPU_DOWN_PREPARE:
@@ -861,24 +860,27 @@ static struct notifier_block __cpuinitdata pmu_cpu_notifier = {
 static int perf_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
 		void *v)
 {
+	struct pmu *pmu;
 	switch (cmd) {
 	case CPU_PM_ENTER:
-		if (cpu_has_active_perf()) {
+		if (cpu_has_active_perf((int)v)) {
 			armpmu_update_counters();
-			perf_pmu_disable(&cpu_pmu->pmu);
+			pmu = &cpu_pmu->pmu;
+			pmu->pmu_disable(pmu);
 		}
 		break;
 
 	case CPU_PM_ENTER_FAILED:
 	case CPU_PM_EXIT:
-		if (cpu_has_active_perf() && cpu_pmu->reset) {
+		if (cpu_has_active_perf((int)v) && cpu_pmu->reset) {
 			/*
 			 * Flip this bit so armpmu_enable knows it needs
 			 * to re-enable active counters.
 			 */
 			__get_cpu_var(from_idle) = 1;
 			cpu_pmu->reset(NULL);
-			perf_pmu_enable(&cpu_pmu->pmu);
+			pmu = &cpu_pmu->pmu;
+			pmu->pmu_enable(pmu);
 		}
 		break;
 	}
